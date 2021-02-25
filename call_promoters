@@ -1,0 +1,34 @@
+#! /bin/bash
+
+# Call enhancers and promoters using eHMM
+
+# parse arguments
+[[ $# != 4 ]] && echo "Usage: prun mdl eHMM sample bam_dir sizes outdir" && exit 1
+sample=$1
+bam_dir=$(realpath $2)
+sizes=$(realpath $3)
+outdir=$(realpath $4)
+
+# find bam files
+atac=$(find $bam_dir -iname atac*_${sample}*.bam)
+h3k27ac=$(find $bam_dir -iname h3k27ac_${sample}*.bam)
+h3k4me1=$(find $bam_dir -iname h3k4me1_${sample}*.bam)
+h3k4me3=$(find $bam_dir -iname h3k4me3_${sample}*.bam)
+
+# create whole-genome regions bed file
+regions=$outdir/regions.bed
+echo -n "" > $regions
+while IFS=$'\t' read chr size; do
+	echo -e "$chr\t100\t$((size/100*100))" >> $regions
+done < $sizes
+
+# call promoters
+ehmm.R applyModel \
+	   --regions $regions \
+	   --mark ATAC-seq:$atac \
+	   --mark H3K27AC:$h3k27ac \
+	   --mark H3K4ME1:$h3k4me1 \
+	   --mark H3K4ME3:$h3k4me3 \
+	   --genomeSize $sizes \
+	   --outdir $outdir \
+	   --nthreads 30

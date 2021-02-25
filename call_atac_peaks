@@ -1,0 +1,32 @@
+#! /bin/bash
+
+# This script calls ATAC-seq peaks using either genrich or macs2 and a given p-value
+
+# parse arguments
+[[ $# != 6 ]] && echo "Usage: prun mdl call_atac_peaks peak_caller pval bam_dir sample genome.sizes outfile" && exit 1
+peak_caller=$1
+pval=$2
+bam_dir=$(realpath $3)
+sample=$4
+sizes=$(realpath $5)
+outfile=$(realpath $6)
+
+# prepare variables
+sample_dir=$(dirname $outfile)/${sample}
+bam=$(find $bam_dir -iname "atac*${sample}*bam")
+[[ -z $bam ]] && echo "Error: ${sample} ATAC-seq bam-file not found in ${bam_dir}." && exit 1
+genome_size=$(cat $sizes | cut -d $'\t' -f 2 | paste -sd+ | bc) # sum over chromosome sizes
+
+if [[ $peak_caller == 'genrich' ]]; then
+	bam_nsort=${sample_dir}/$(basename "$bam" .bam).nsort.bam
+	[[ ! -e $bam_nsort ]] && samtools sort -n -o $bam_nsort $bam
+	genrich_outfile=${sample_dir}/${sample}.genrich
+	[[ ! -e $genrich_outfile ]] && Genrich -j -p $pval -m 10 -t $bam_nsort -o $genrich_outfile # -j: ATAC-seq flag, -m: min MAPQ
+	awk -F"\t"  'BEGIN{OFS="\t"} {print $1, $2, $3, $4}' $genrich_outfile > $outfile
+	# rm $bam_nsort
+elif [[ $peak_caller == 'macs2' ]]; then
+	macs2 callpeak -t $bam -n $sample -q $pval -g $genome_size --outdir $sample_dir
+	ln -sr ${sample_dir}/${sample}_summits.bed $outfile
+else
+	echo "Error: peak_caller must be one of [genrich, macs2]" && exit 1
+fi

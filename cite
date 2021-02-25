@@ -1,0 +1,10 @@
+#! /bin/bash
+
+[[ $# != 3 ]] && echo "Usage: prun mdl cite enhancer_caller promoter_caller atac_peaks_caller" && exit 1
+
+declare -A cite=( [crup]="Enhancer calling using CRUP: Ramisch et al., Genome Biol 2019: https://doi.org/10.1186/s13059-019-1860-7" [ehmm]="Promoter calling using eHMM: Zehnder et al., BMC Bioinf 2019: https://doi.org/10.1186/s12859-019-2708-6" [genrich]="ATAC-seq peak calling using Genrich: Not pulished github repo: https://github.com/jsh58/Genrich/)" [macs2]="ATAC-seq peak calling using MACS2: Zhang et al., Genome Biol 2008: https://dx.doi.org/10.1186%2Fgb-2008-9-9-r137" )
+
+echo "Please cite the following publications:"
+echo "${cite[$1]}"
+echo "${cite[$2]}" 
+echo "${cite[$3]}"
