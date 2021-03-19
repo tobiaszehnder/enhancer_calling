@@ -27,6 +27,7 @@ if (transcripts_file=='UCSC') {
 	txdb <- tryCatch(makeTxDbFromUCSC(genome_build, tablename=tablename), error=function(cond) return(NA))
 	if (!is.na(txdb)) {
 		tss <- c(resize(transcripts(txdb), width=1, fix='start'), promoters)
+        export.bed(resize(transcripts(txdb), width=1, fix='start'), sprintf('%s/transcripts_%s_UCSC.bed', dirname(outfile), genome_build))
 		print('TSS filtering based on promoters predicted by eHMM and TSS from UCSC')
 	} else {
 	    print('No transcripts / TSS passed and no TxDb found on UCSC. TSS filtering will only be based on promoters predicted by eHMM.')

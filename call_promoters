@@ -3,7 +3,7 @@
 # Call enhancers and promoters using eHMM
 
 # parse arguments
-[[ $# != 4 ]] && echo "Usage: prun mdl eHMM sample bam_dir sizes outdir" && exit 1
+[[ $# != 4 ]] && echo "Usage: prun mdl call_promoters sample bam_dir sizes outdir" && exit 1
 sample=$1
 bam_dir=$(realpath $2)
 sizes=$(realpath $3)

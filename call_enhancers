@@ -1,182 +1,108 @@
-#! /usr/bin/make -f
+#! /bin/bash
 
-define arg_msg
-"""
+usage() {
+cat << EOF
+Pipeline for calling and filtering TSS-distal ATAC-seq peaks overlapping an enhancer prediction by CRUP
 
-Mandatory arguments:
-bam_dir: path to the bam files
-sample: e.g. FL_E105_mm10_WT
-genome_build: e.g. mm10
-nrep: Number of biological replicates, e.g. 2.
-sequencing_type: single or paired
+Usage: prun mdl ${0##*/} -b BAM_DIR -s SAMPLE -g GENOME_BUILD -r NREP -q SEQ_TYPE [optional: -t TRANSCRIPTS -m MERGE_REPS -k PEAK_CALLER -p PVAL_ATAC_PEAKS -c CRUP_CUTOFF -o OUTDIR -f FORCE_RUN -@ NTHREADS -n DRY_RUN]
 
-Optional arguments:
-outdir: Output directory
-mergebams: Predict enhancers on merged bam files instead of combining replicates at the end. Default: False
-peak_caller: genrich (default) or macs2
-pval: p-value for ATAC-seq peak caller. Default: 0.05
-transcripts: bed-file with annotated transcripts for the given genome for filtering TSS
-crup_cutoff: Default 0.5
-nthreads: Number of parallel threads to use for CRUP and eHMM. Default 1
-"""
-endef
+required:
+	-d BAM_DIR	   Path to the directory containing the bam files
+	-s SAMPLE	   Sample description, e.g. FL_E105_mm10_WT
+	-g GENOME_BUILD	   Genome build, e.g. mm10
+	-r NREP		   Number of Replicates
+	-q SEQ_TYPE	   ChIP-seq Sequencing Type (single or paired)
 
-# print argument summary block
-$(info Argument summary)
+optional:
+	-t TRANSCRIPTS	   Bed file with annotated transcripts for the given genome for filtering TSS
+	-m MERGE_REPS	   Flag for predicting enhancers on merged bam files instead of combining replicates at the end. Default: Not set.
+	-k PEAK_CALLER	   Genrich (default) or MACS2
+	-p PVAL_ATAC_PEAKS p-value for ATAC-seq peak caller. Default: 0.05
+	-c CRUP_CUTOFF	   Default: 0.5
+	-o OUTDIR	   Path to the output directory
+	-f FORCE	   Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
+	-@ NTHREADS   	   Number of parallel threads
+        -n DRY_RUN	   Flag for a dry run, i.e. only print the commands instead of executing.
+	-v VERBOSE	   Print verbose info
+	-b BETA		   Use currently developed Snakefile (for testing purposes only)
+EOF
+}
 
-ifndef bam_dir
-$(error bam_dir is not set. $(arg_msg))
-else
-$(info bam_dir: $(realpath $(bam_dir)))
-endif
-
-ifndef sample
-$(error sample is not set. $(arg_msg))
-else
-$(info sample: $(sample))
-endif
-
-ifndef genome_build
-$(error genome_build is not set. $(arg_msg))
-else
-$(info genome_build: $(genome_build))
-endif
-
-ifndef nrep
-$(error nrep not set. $(arg_msg))
-else
-$(info nrep: $(nrep))
-endif
-
-ifneq ($(shell [[ $(sequencing_type) == single || $(sequencing_type) == paired ]] && echo true ),true)
-$(error sequencing_type must be one of [single,paired])
-endif
-
-ifndef sequencing_type
-$(error sequencing_type is not set. $(arg_msg))
-else
-$(info sequencing_type: $(sequencing_type))
-endif
-
-ifndef outdir
-outdir=$(realpath .)
-endif
-$(info outdir: $(outdir))
-
-ifndef mergebams
-mergebams=False
-endif
-$(info Merge bam files: $(mergebams))
-
-ifndef peak_caller
+# parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
+keep_going_flag="-k" # don't abort when one job fails
+transcripts="UCSC"
+merge_reps=False
 peak_caller=genrich
-endif
-$(info peak_caller: $(peak_caller))
-
-ifneq ($(shell [[ $(peak_caller) == genrich || $(peak_caller) == macs2 ]] && echo true ),true)
-$(error peak_caller must be one of [genrich,macs2])
-endif
-
-ifndef pval
 pval=0.05
-endif
-$(info pval: $(pval))
-
-ifndef transcripts
-transcripts=UCSC
-$(info transcripts: Not set. Will try to download TSS from UCSC and use promoter predictions to identify TSS-distal enhancers.)
-else
-$(info transcripts: $(transcripts))
-endif
-
-ifndef crup_cutoff
 crup_cutoff=0.5
-endif
-$(info crup_cutoff: $(crup_cutoff))
+outdir=$(realpath .)
+force="none"
+nthreads="--cores 1"
+snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile_release"
 
-ifndef nthreads
-nthreads=1
-endif
-$(info nthreads: $(nthreads))
+while getopts ":d:s:g:r:q:t:k:p:c:o:@:f:mnvb" OPTION; do
+	case $OPTION in
+		d) bam_dir=$(realpath $OPTARG) ;;
+		s) sample=$OPTARG ;;
+		g) build=$OPTARG ;;
+		r) nrep=$OPTARG ;;
+		q) sequencing_type=$OPTARG ;;
+		t) transcripts=$(realpath $OPTARG) ;;
+		m) merge_reps=True ;;
+		k) peak_caller=$OPTARG ;;
+		p) pval=$OPTARG ;;
+		c) crup_cutoff=$OPTARG ;;
+		o) outdir=$OPTARG ;;
+		f) force=$OPTARG ;;
+		@) nthreads="--cores $OPTARG" ;;
+		n) nthreads="-nr" ;;
+		v) verbose="-p" ;;
+		b) snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile" ;;
+		?) usage; exit 1 ;;
+ 	esac
+done
 
-# print new block with commands
-define linebreak
+# throw error if not all mandatory arguments are passed
+if [ -z ${bam_dir+x} ] || [ -z ${sample+x} ] || [ -z ${build} ] || [ -z ${nrep} ] || [ -z ${sequencing_type} ] ; then
+	usage
+	exit 1
+fi
 
-
-endef
-$(info $(linebreak)Start computing)
-
-# define variables
-crup_dir=$(outdir)/crup
-atac_peaks_dir=$(outdir)/atac_peaks
-promoter_dir=$(outdir)/promoter
-fai=/project/MDL_ChIPseq/data/genome/fasta/$(genome_build).fa.fai
-sizes=/project/MDL_ChIPseq/data/genome/assembly/$(genome_build).sizes
-
-# define targets
-ifeq ($(mergebams),True)
-final_enhancers = $(outdir)/$(sample)_merged.enhancers.bed
-stats = $(outdir)/$(sample)_merged.enhancers.stats.pdf
-enhancers_rep = $(outdir)/$(sample)_merged.enhancers.filtered.bed
-
+# define which rules to force run
+if [[ $force == "all" ]]; then
+	force_flag="--forceall"
+elif [[ $force == "none" ]]; then
+	force_flag=""
 else
-enhancers_rep = $(foreach rep, $(shell seq 1 $(nrep)), $(outdir)/$(sample)_Rep$(rep).enhancers.filtered.bed)
-final_enhancers = $(outdir)/$(sample).enhancers.bed
-stats = $(outdir)/$(sample).enhancers.stats.pdf
-endif
+	force_flag="--forcerun $force"
+fi
 
-targets = $(final_enhancers) $(stats) $(enhancers_rep)
+# define command
+cmd="""
+snakemake \
+	--snakefile $snakefile \
+	--config \
+	bam_dir=$bam_dir \
+	sample=$sample \
+	build=$build \
+	nrep=$nrep \
+	sequencing_type=$sequencing_type \
+	transcripts=$transcripts \
+	merge_reps=$merge_reps \
+	peak_caller=$peak_caller \
+	pval=$pval \
+	crup_cutoff=$crup_cutoff \
+	outdir=$outdir \
+	$force_flag \
+ 	$keep_going_flag \
+	$verbose \
+	$nthreads
+"""
 
-# ------------------------------------------------------------------
+# print command during dry run
+if [[ $nthreads == '-nr' ]]; then
+	echo $cmd
+fi
 
-all: $(targets)
-	echo $(targets)
-
-# ------------------------------------------------------------------
-
-# combine replicate predictions
-$(final_enhancers): $(enhancers_rep)
-	prun mdl enhancer_combine_replicates.R $@ $(nrep) $^
-	prun mdl cite crup ehmm $(peak_caller) | tee cite.txt
-
-# plot stats
-$(stats): $(final_enhancers) $(enhancers_rep)
-	enhancer_stats.R $@ $(nrep) $(transcripts)
-
-# ------------------------------------------------------------------
-.DELETE_ON_ERROR:
-.SECONDARY:
-
-# ------------------------------------------------------------------
-
-# create data table per replicate
-%data_table.txt:
-	mkdir -p $(dir $@)
-	prun mdl create_crup_datatable $(shell basename $(dir $@)) $(realpath $(bam_dir)) $@
-
-# normalize data for CRUP
-%data_matrix.rds: %data_table.txt
-	prun mdl CRUP.R -N -I -x $(nthreads) -g $(fai) -s $(sequencing_type) -i $<
-	mv $(patsubst %.txt,%.data_matrix.rds,$<) $@
-
-# call enhancers with CRUP
-%.enhancers.crup.bed: %/data_matrix.rds
-	mkdir -p $(patsubst %.enhancers.crup.bed,%,$@)
-	prun mdl CRUP.R -P -m $< -u $(crup_cutoff) -o $(patsubst %.enhancers.crup.bed,%,$@)
-	ln -sr $(patsubst %.enhancers.crup.bed,%/singleEnh.bedGraph,$@) $@
-
-# call ATAC peaks
-%.atac_peaks.bed:
-	mkdir -p $(patsubst %.atac_peaks.bed,%,$@)
-	prun mdl call_atac_peaks $(peak_caller) $(pval) $(bam_dir) $(patsubst %.atac_peaks.bed,%,$(notdir $@)) $(sizes) $@
-
-# call promoters with eHMM
-# the first patsubst in the ehmm command yields the sample and the replicate
-%.promoters.bed:
-	mkdir -p $(patsubst %.promoters.bed,%,$@)
-	prun mdl call_promoters $(patsubst %.promoters.bed,%,$(notdir $@)) $(bam_dir) $(sizes) $(patsubst %.promoters.bed,%,$@)
-	ln -sr $(patsubst %.promoters.bed,%/promoterRegions.bed,$@) $@
-
-# filter enhancers (TSS- and promoter-distal ATAC peaks over CRUP predictions)
-$(outdir)/$(sample)_%.enhancers.filtered.bed: $(atac_peaks_dir)/$(sample)_%.atac_peaks.bed $(crup_dir)/$(sample)_%.enhancers.crup.bed $(promoter_dir)/$(sample)_%.promoters.bed
-	prun mdl enhancer_filter.R $@ $^ $(transcripts) $(genome_build)
+# run snakefile
+eval $cmd
