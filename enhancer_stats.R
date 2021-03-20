@@ -4,12 +4,13 @@
 # Usage: ./compute_stats.R > stats
 
 args <- commandArgs(trailingOnly=T)
-if (length(args) != 5) stop('Usage: ./enhancer_stats.R outfile n_replicates transcripts mergebams peak_caller')
+if (length(args) != 6) stop('Usage: ./enhancer_stats.R outfile n_replicates transcripts mergebams peak_caller build')
 outfile <- args[1]
 nreps <- as.integer(args[2])
 transcripts_bed <- args[3]
 mergebams <- args[4]
 peak_caller <- args[5]
+build <- args[6]
 
 # define list of replicates (either Rep1, Rep2, ... or merged)
 if (mergebams == 'True') {
@@ -37,7 +38,8 @@ crup <- sapply(crup_bed, import.bed)
 atac <- sapply(atac_bed, import.bed)
 promoters <- sapply(promoters_bed, import.bed)
 if (transcripts_bed == 'UCSC') {
-    tss <- GRanges()
+    transcripts_bed <- sprintf('%s/transcripts_%s_UCSC.bed', dirname('outfile'), build)
+    tss <- resize(import.bed(transcripts_bed), width=1, fix='start')
 } else {
     tss <- resize(import.bed(transcripts_bed), width=1, fix='start')
 }

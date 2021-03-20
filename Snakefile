@@ -1,10 +1,12 @@
 # import modules
-import numpy as np, pandas as pd, re
+import numpy as np, pandas as pd, re, os
 
 # convert dict entries to variables, e.g. a = d['a']
 for k,v in config.items():
     exec(k + '=v')
 
+transcripts = os.path.abspath(transcripts) if not transcripts == 'UCSC' else transcripts
+    
 # define variables
 crup_dir = '%s/crup' %outdir
 atac_peaks_dir = '%s/%s' %(outdir, peak_caller)
@@ -66,8 +68,10 @@ rule plot_stats:
         nrep = nrep,
         transcripts = transcripts,
         merge_reps = merge_reps,
-        peak_caller = peak_caller
-    shell: 'enhancer_stats.R {output} {params}'
+        peak_caller = peak_caller,
+        build = build
+    shell:
+        'enhancer_stats.R {output} {params}'
 
 rule filter_enhancers:
     input:

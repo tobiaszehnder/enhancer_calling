@@ -19,7 +19,9 @@ h3k4me3=$(find $bam_dir -iname h3k4me3_${sample}*.bam)
 regions=$outdir/regions.bed
 echo -n "" > $regions
 while IFS=$'\t' read chr size; do
-	echo -e "$chr\t100\t$((size/100*100))" >> $regions
+	if [[ $chr != *"Un"* && $chr != *"random"* && $chr != "chrM" ]]; then
+		echo -e "$chr\t100\t$((size/100*100))" >> $regions
+	fi
 done < $sizes
 
 # call promoters

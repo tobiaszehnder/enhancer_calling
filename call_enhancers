@@ -47,7 +47,7 @@ while getopts ":d:s:g:r:q:t:k:p:c:o:@:f:mnvb" OPTION; do
 		g) build=$OPTARG ;;
 		r) nrep=$OPTARG ;;
 		q) sequencing_type=$OPTARG ;;
-		t) transcripts=$(realpath $OPTARG) ;;
+		t) transcripts=$OPTARG ;;
 		m) merge_reps=True ;;
 		k) peak_caller=$OPTARG ;;
 		p) pval=$OPTARG ;;

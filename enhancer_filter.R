@@ -10,6 +10,7 @@ packages <- c('rtracklayer', 'GenomicFeatures')
 suppressMessages(null <- lapply(packages, library, character.only=T))
 
 # load bed files
+outfile <- args[1]
 atac <- import.bed(args[2])
 crup <- import.bed(args[3])
 promoters <- import.bed(args[4])
@@ -44,4 +45,4 @@ atac_tss_distal <- atac[!overlapsAny(atac, tss, maxgap=1000)]
 enhancers <- atac_tss_distal[overlapsAny(atac_tss_distal, crup, maxgap=200)]
 
 # write to file
-export.bed(enhancers, args[1])
+export.bed(enhancers, outfile)
