@@ -5,8 +5,8 @@ import numpy as np, pandas as pd, re, os
 for k,v in config.items():
     exec(k + '=v')
 
-transcripts = os.path.abspath(transcripts) if not transcripts == 'UCSC' else transcripts
-    
+transcripts_file = os.path.abspath(transcripts) if not transcripts == 'UCSC' else '%s/transcripts_%s_UCSC.bed' %(outdir, build)
+
 # define variables
 crup_dir = '%s/crup' %outdir
 atac_peaks_dir = '%s/%s' %(outdir, peak_caller)
@@ -15,7 +15,7 @@ fai = '/project/MDL_ChIPseq/data/genome/fasta/%s.fa.fai' %build
 sizes = '/project/MDL_ChIPseq/data/genome/assembly/%s.sizes' %build
 
 # define targets
-def get_targets(merge_reps):
+def get_targets(merge_reps, transcripts_file):
     if merge_reps:
         final_enhancers = '%s/%s_merged.enhancers.bed' %(outdir, sample)
         enhancers_rep = '%s/%s_merged.enhancers.filtered.bed' %(outdir, sample)
@@ -23,14 +23,23 @@ def get_targets(merge_reps):
         final_enhancers = '%s/%s.enhancers.bed' %(outdir, sample)
         enhancers_rep = ['%s/%s_Rep%s.enhancers.filtered.bed' %(outdir, sample, rep) for rep in np.arange(nrep)+1]
     stats = re.sub('.bed', '.stats.pdf', final_enhancers)
-    return final_enhancers, enhancers_rep, stats
+    return final_enhancers, enhancers_rep, transcripts_file, stats
 
 rule all:
-    input: get_targets(merge_reps)
+    input: get_targets(merge_reps, transcripts_file)
     params:
         peak_caller = peak_caller
     shell:
         'prun mdl cite crup ehmm {params.peak_caller}'
+
+rule get_transcripts:
+    output:
+        '%s/transcripts_%s_UCSC.bed' %(outdir, build)
+    params:
+        build = build,
+        outdir = outdir
+    shell:
+        'prun mdl get_transcripts.R {params}'
 
 def get_filtered_enhancers_per_replicate(wc, nrep, merge_reps):
     print(merge_reps)
@@ -76,20 +85,20 @@ rule plot_stats:
 rule filter_enhancers:
     input:
         atac_peaks = '%s/{sample}_{rep}.atac_peaks.bed' %atac_peaks_dir,
-        crup_predictions = '%s/{sample}_{rep}.enhancers.crup.bed' %crup_dir,
-        promoters = '%s/{sample}_{rep}.promoters.bed' %promoter_dir
+        crup_predictions = '%s/{sample}_{rep}.enhancers.crup.trim.bed' %crup_dir,
+        promoters = '%s/{sample}_{rep}.promoters.bed' %promoter_dir,
+        transcripts = transcripts_file
     output:
         '{outdir}/{sample}_{rep}.enhancers.filtered.bed'
     params:
-        transcripts = transcripts,
         build = build
     shell:
         'prun mdl enhancer_filter.R {output} {input} {params}'
 
 rule call_promoters:
     input:
-        bam_dir = bam_dir,
-        sizes = sizes
+        bam_dir = ancient(bam_dir),
+        sizes = ancient(sizes)
     output:
         '{promoter_dir}/{sample}.promoters.bed'
     shell:
@@ -132,9 +141,20 @@ rule call_crup_enhancers:
         ln -sr {wildcards.crup_dir}/{wildcards.sample}_{wildcards.rep}/singleEnh.bedGraph {output}
         '''
 
+rule trim_crup_enhancers:
+    # CRUP predictions can go beyond chromosome size and into negative coordinates. trim to chromosome sizes by taking intersect.
+    input:
+        '{crup_dir}/{sample}_{rep}.enhancers.crup.bed'
+    output:
+        '{crup_dir}/{sample}_{rep}.enhancers.crup.trim.bed'
+    params:
+        sizes = sizes
+    shell:
+        'prun mdl trim_regions_to_chromosome_boundaries.R {input} {params} {output}'
+
 rule normalize_crup_data:
     input:
-        '{data_dir}/data_table.txt'
+        ancient('{data_dir}/data_table.txt')
     output:
         '{data_dir}/data_matrix.rds'
     log:
@@ -152,7 +172,7 @@ rule normalize_crup_data:
 
 rule create_crup_data_table:
     input:
-        bam_dir
+        ancient(bam_dir)
     output:
         '{data_dir}/data_table.txt'
     shell:
