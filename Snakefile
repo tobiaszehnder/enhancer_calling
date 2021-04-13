@@ -23,7 +23,8 @@ def get_samples(samples, bam_dir):
     # function to return samples in the bam_dir and distinguish those that are available in 1 replicate from those that are available in multiple replicates
     # for every sample, check if all the bam files are there and skip the sample (or adjust the number of complete replicates) if files are missing.
     if samples == 'all':
-        print('\n' + '_'*100 + '\n\nFetching sample names from %s:\n' %bam_dir)
+        atac_only_message = '\nATAC_ONLY mode: Only calling ATAC-seq peaks.' if atac_only else ''
+        print('\n' + '_'*100 + atac_only_message + '\n\nFetching sample names from %s:\n' %bam_dir)
         atac_files = glob.glob('%s/ATAC-seq*%s*Rep*.rmdup.bam' %(bam_dir,build)) # build: make sure only samples matching the passed build are taken in case there are data from multiple species in the bam_dir
     else:
         atac_files = sum([glob.glob('%s/ATAC-seq_%s_Rep*.rmdup.bam' %(bam_dir,sample)) for sample in samples.split(',')], [])
@@ -31,25 +32,38 @@ def get_samples(samples, bam_dir):
     atac_samples = ['_'.join(os.path.basename(x).split('_')[:5]) for x in atac_files]
     print('\nUnique samples found: (ATAC-seq)\n%s\n' %'\n'.join(['%s' %sample.replace('ATAC-seq_','') for sample in set(atac_samples)]))
     atac_samples_nrep_counter = collections.Counter(atac_samples)
+    if atac_only:
+        print('Valid samples:\n' + '\n'.join(sum([['%s Rep%s' %(sample.replace('ATAC-seq_',''), rep) for rep in range(1,nreps+1)] for sample, nreps in atac_samples_nrep_counter.items() if not nreps == 0], [])) + '\n' + '_'*100 + '\n')
+        return {sample.replace('ATAC-seq_',''): count for sample, count in atac_samples_nrep_counter.items() if count > 0}
     samples_nrep_dict = {sample: n_complete_reps for sample, n_complete_reps in [count_complete_replicates_per_sample(bam_dir, sample.replace('ATAC-seq_', ''), count) for sample, count in atac_samples_nrep_counter.items()] if n_complete_reps > 0}
     print('Valid samples:\n' + '\n'.join(sum([['%s Rep%s' %(sample, rep) for rep in range(1,n_complete_reps+1)] for sample, n_complete_reps in samples_nrep_dict.items()], [])) + '\n' + '_'*100 + '\n')
     return samples_nrep_dict
 
-def get_targets(sample, nrep, merge_reps, transcripts_file):
-    if nrep == 1:
-        enhancers_rep = ['%s/%s_Rep1.enhancers.filtered.bed' %(outdir, sample)]
-        targets = enhancers_rep # + [re.sub('.bed', '.stats.pdf', enhancers)]
+def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=False):
+    if atac_only:
+        rep_peaks = ['%s/ATAC-seq_%s_Rep%s.%s_peaks.bed' %(atac_peaks_dir, sample, i, peak_caller) for i in range(1,nrep+1)]
+        combined_peaks = []
+        if nrep > 1:
+            if peak_caller == 'macs2':
+                combined_peaks = ['%s/ATAC-seq_%s.macs2_peaks.idr.bed' %(atac_peaks_dir, sample)]
+            elif peak_caller == 'genrich':
+                combined_peaks = ['%s/ATAC-seq_%s.genrich_peaks.bed' %(atac_peaks_dir, sample)]
+        return rep_peaks + combined_peaks
     else:
-        if merge_reps == 'intersect_predictions':
-            enhancers_intersect = ['%s/%s.enhancers.intersect_predictions.bed' %(outdir, sample)]
-            enhancers_rep = ['%s/%s_Rep%i.enhancers.filtered.bed' %(outdir, sample, i) for i in range(1,(nrep+1))]
-            targets = sum([enhancers_intersect, enhancers_rep], [])
-            # targets += [re.sub('.bed', '.stats.pdf', enhancers_intersect)]
-        elif merge_reps == 'merge_bams':
-            enhancers = ['%s/%s_merged.enhancers.filtered.bed' %(outdir, sample)]
-            merged_bam_files = ['%s/%s_%s_merged.cpm.bw' %(bw_dir, feature, sample) for feature in ('H3K27ac','H3K4me1','H3K4me3')]
-            targets = sum([enhancers, merged_bam_files], [])
-            # targets += [re.sub('.bed', '.stats.pdf', enhancers)]
+        if nrep == 1:
+            enhancers_rep = ['%s/%s_Rep1.enhancers.filtered.bed' %(outdir, sample)]
+            targets = enhancers_rep # + [re.sub('.bed', '.stats.pdf', enhancers)]
+        else:
+            if merge_reps == 'intersect_predictions':
+                enhancers_intersect = ['%s/%s.enhancers.intersect_predictions.bed' %(outdir, sample)]
+                enhancers_rep = ['%s/%s_Rep%i.enhancers.filtered.bed' %(outdir, sample, i) for i in range(1,(nrep+1))]
+                targets = sum([enhancers_intersect, enhancers_rep], [])
+                # targets += [re.sub('.bed', '.stats.pdf', enhancers_intersect)]
+            elif merge_reps == 'merge_bams':
+                enhancers = ['%s/%s_merged.enhancers.filtered.bed' %(outdir, sample)]
+                merged_bam_files = ['%s/%s_%s_merged.cpm.bw' %(bw_dir, feature, sample) for feature in ('H3K27ac','H3K4me1','H3K4me3')]
+                targets = sum([enhancers, merged_bam_files], [])
+                # targets += [re.sub('.bed', '.stats.pdf', enhancers)]
     return targets
 
 def get_replicate_bam(feature, sample, rep, index=False):
@@ -76,7 +90,7 @@ def get_input_for_enhancer_filtering(wc):
     transcripts = transcripts_file
     return [atac_peaks, crup_predictions, promoters, transcripts]
 
-# convert config dict entries to variables, e.g. a = d['a']. (bam_dir, samples, build, sequencing_type, transcripts, merge_reps, peak_caller, crup_cutoff, outdir)
+# convert config dict entries to variables, e.g. a = d['a']. (bam_dir, samples, build, transcripts, merge_reps, peak_caller, crup_cutoff, outdir, atac_only)
 for k,v in config.items():
     exec(k + '=v')
 
@@ -98,7 +112,7 @@ genome_size = sum([int(x.strip().split('\t')[1]) for x in open(sizes).readlines(
 samples_nrep_dict = get_samples(samples, bam_dir)
 
 # define targets
-targets = sum([get_targets(sample, nrep, merge_reps, transcripts_file) for sample, nrep in samples_nrep_dict.items()], [])
+targets = sum([get_targets(sample, nrep, merge_reps, transcripts_file, atac_only) for sample, nrep in samples_nrep_dict.items()], [])
 
 # -----
 # rules
@@ -216,13 +230,12 @@ rule name_sort:
         'samtools sort -n -@ {threads} -o {output} {input}'
         
 rule call_single_replicate_atac_peaks_genrich:
-    # use more stringend p-value of 0.01 for single replicate peaks
     input:
         lambda wc: get_replicate_bam('ATAC-seq', wc.sample, wc.rep).replace('.rmdup.bam','.rmdup.nsort.bam')
     output:
         '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,((?!merged).)*}.genrich_peaks.narrowPeak'
     shell:
-        'Genrich -j -y -p 0.01 -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end)
+        'Genrich -j -y -p 0.05 -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end)
 
 rule call_multi_replicate_atac_peaks_genrich:
     # genrich can handle multiple replicates, making IDR obsolete. Here, the q-value instead of p-value will be used.

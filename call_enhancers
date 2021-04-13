@@ -19,27 +19,28 @@ optional:
 	-p PEAK_CALLER	   macs2 (default) or genrich
 	-c CRUP_CUTOFF	   Default: 0.5
 	-o OUTDIR	   Path to the output directory
+	-a ATAC_ONLY   Only call ATAC-seq peaks
 	-f FORCE	   Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
 	-@ NTHREADS   	   Number of parallel threads
         -n DRY_RUN	   Flag for a dry run, i.e. only print the commands instead of executing.
 	-b BETA		   Use currently developed Snakefile (for testing purposes only)
-	-a SNAKEMAKE_ARGS    Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
+	-! SNAKEMAKE_ARGS    Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
 EOF
 }
 
 # parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
 transcripts="UCSC"
-merge_reps="intercept_predictions"
+merge_reps="intersect_predictions"
 peak_caller=macs2
 crup_cutoff=0.5
 outdir=$(realpath .)
+atac_only=false
 force="none"
 nthreads="--cores 1"
 snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile_release"
-# snakemake_args="-pk --rerun-incomplete"
-snakemake_args="-p --rerun-incomplete"
+snakemake_args="-pk --rerun-incomplete"
 
-while getopts ":d:s:g:t:m:p:c:o:f:@:a:nb" OPTION; do
+while getopts ":d:s:g:t:m:p:c:o:f:@:!:anb" OPTION; do
 	case $OPTION in
 		d) bam_dir=$(realpath $OPTARG) ;;
 		s) samples=$OPTARG ;;
@@ -49,11 +50,12 @@ while getopts ":d:s:g:t:m:p:c:o:f:@:a:nb" OPTION; do
 		p) peak_caller=$OPTARG ;;
 		c) crup_cutoff=$OPTARG ;;
 		o) outdir=$OPTARG ;;
+		a) atac_only=true ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
 		n) nthreads="-nr" ;;
 		b) snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile" ;;
-		a) snakemake_args="$snakemake_args $OPTARG" ;;
+		!) snakemake_args="$snakemake_args $OPTARG" ;;
 		?) usage; exit 1 ;;
  	esac
 done
@@ -85,6 +87,7 @@ snakemake \
 	peak_caller=$peak_caller \
 	crup_cutoff=$crup_cutoff \
 	outdir=$outdir \
+	atac_only=$atac_only \
 	$force_flag \
 	$snakemake_args \
 	$nthreads
