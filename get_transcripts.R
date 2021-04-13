@@ -9,15 +9,19 @@ outdir <- args[2]
 packages <- c('rtracklayer', 'GenomicFeatures')
 suppressMessages(null <- lapply(packages, library, character.only=T))
 
-if (startsWith(build, 'mm') | startsWith(build, 'hg')) {
-    tablename <- 'refGene'
-} else {
-    tablename <- 'knownGene'
-}   
+# fetch transcripts from four possible gene model sources (take the first that exists)
+txdb <- {
+    tryCatch(makeTxDbFromUCSC(build, tablename='refGene'), error=function(cond) return({
+        tryCatch(makeTxDbFromUCSC(build, tablename='knownGene,'), error=function(cond) return({
+            tryCatch(makeTxDbFromUCSC(build, tablename='ensGene'), error=function(cond) return({
+                tryCatch(makeTxDbFromUCSC(build, tablename='ncbiRefSeq'), error=function(cond) return(NA))
+            }))
+        }))
+    }))
+ }
 
-txdb <- tryCatch(makeTxDbFromUCSC(build, tablename=tablename), error=function(cond) return(NA))
 if (is.na(txdb)) {
-    print('Path to transcripts file does not exist. TSS filtering will only be based on promoters predicted by eHMM.')
+    print(sprintf('Could not find %s TxDb on UCSC.', build))
     trx <- GRanges()
 } else {
     trx <- transcripts(txdb)

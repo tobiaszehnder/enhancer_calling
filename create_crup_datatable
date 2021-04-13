@@ -2,18 +2,14 @@
 
 # This script looks for enhancer-relevant bam-files in a given directory, writes them to CRUP-readable data tables and returns a list of those files
 
-[[ $# != 3 ]] && echo "Usage: prun mdl create_crup_datatables sample bam_dir outfile" && exit 1
+[[ $# != 3 ]] && echo "Usage: prun mdl create_crup_datatable sample outfile h3k27ac.bam h3k4me1.bam h3k4me3.bam" && exit 1
 
 # parse arguments and initialize variables
 sample=$1
-bam_dir=$(realpath $2)
-outfile=$3
-
-# find bam files
-# atac=$(find $bam_dir -iname atac_${sample}*${i}*.bam)
-h3k27ac=$(find $bam_dir -iname h3k27ac_${sample}*.bam)
-h3k4me1=$(find $bam_dir -iname h3k4me1_${sample}*.bam)
-h3k4me3=$(find $bam_dir -iname h3k4me3_${sample}*.bam)
+outfile=$2
+h3k27ac=$3
+h3k4me1=$4
+h3k4me3=$5
 
 # stop if any file for this replicate was not found
 for fn in ${files[@]}; do

@@ -1,9 +1,10 @@
 #! /usr/bin/env Rscript-4
 
-### This script extracts the union of overlapping previously called replicate-specific enhancers (enhancers_per_replicate.R)
+### This script extracts the intersection of previously called replicate-specific enhancers (enhancers_per_replicate.R)
+### It does so by taking the union of overlapping predictions, a more generous approach compared to the strict intersection, and thus accounting for the potential inaccuracy in the replicates' predictions.
 
 args <- commandArgs(trailingOnly=T)
-if (length(args) < 3) stop('Usage: ./enhancers_replicate_intersections.R enhancers_outfile.bed nrep enhancers_Rep1.bed ... enhancers_Rep[nrep].bed')
+if (length(args) < 3) stop('Usage: ./enhancer_intersect_replicates.R enhancers_outfile.bed nrep enhancers_Rep1.bed ... enhancers_Rep[nrep].bed')
 nrep <- args[2]
 if (!(nrep == 1 | nrep == 2)) stop("Error: nrep must be 1 or 2")
 

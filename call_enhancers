@@ -4,69 +4,64 @@ usage() {
 cat << EOF
 Pipeline for calling and filtering TSS-distal ATAC-seq peaks overlapping an enhancer prediction by CRUP
 
-Usage: prun mdl ${0##*/} -b BAM_DIR -s SAMPLE -g GENOME_BUILD -r NREP -q SEQ_TYPE [optional: -t TRANSCRIPTS -m MERGE_REPS -k PEAK_CALLER -p PVAL_ATAC_PEAKS -c CRUP_CUTOFF -o OUTDIR -f FORCE_RUN -@ NTHREADS -n DRY_RUN]
+Usage: prun mdl ${0##*/} -b BAM_DIR -s SAMPLES -g GENOME_BUILD [optional: -t TRANSCRIPTS -m MERGE_REPS -k PEAK_CALLER -c CRUP_CUTOFF -o OUTDIR -f FORCE_RUN -p NTHREADS -n DRY_RUN]
 
 required:
 	-d BAM_DIR	   Path to the directory containing the bam files
-	-s SAMPLE	   Sample description, e.g. FL_E105_mm10_WT
+	-s SAMPLES	   Sample description, e.g. FL_E105_mm10_WT. Either single sample, comma-separated list of samples, or "all" for all samples in the BAM_DIR.
 	-g GENOME_BUILD	   Genome build, e.g. mm10
-	-r NREP		   Number of Replicates
-	-q SEQ_TYPE	   ChIP-seq Sequencing Type (single or paired)
 
 optional:
 	-t TRANSCRIPTS	   Bed file with annotated transcripts for the given genome for filtering TSS
-	-m MERGE_REPS	   Flag for predicting enhancers on merged bam files instead of combining replicates at the end. Default: Not set.
-	-k PEAK_CALLER	   Genrich (default) or MACS2
-	-p PVAL_ATAC_PEAKS p-value for ATAC-seq peak caller. Default: 0.05
+	-m MERGE_REPS	   intersect_predictions (default) or merge_bams
+	   		   intersect_predictions: Predict enhancers separately on replicates and take the intersection of the final enhancer predictions.
+			   merge_bams: Predict enhancers on merged bam files.
+	-p PEAK_CALLER	   macs2 (default) or genrich
 	-c CRUP_CUTOFF	   Default: 0.5
 	-o OUTDIR	   Path to the output directory
 	-f FORCE	   Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
 	-@ NTHREADS   	   Number of parallel threads
         -n DRY_RUN	   Flag for a dry run, i.e. only print the commands instead of executing.
-	-v VERBOSE	   Print verbose info
 	-b BETA		   Use currently developed Snakefile (for testing purposes only)
+	-a SNAKEMAKE_ARGS    Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
 EOF
 }
 
 # parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
-keep_going_flag="-k" # don't abort when one job fails
 transcripts="UCSC"
-merge_reps=False
-peak_caller=genrich
-pval=0.05
+merge_reps="intercept_predictions"
+peak_caller=macs2
 crup_cutoff=0.5
 outdir=$(realpath .)
 force="none"
 nthreads="--cores 1"
 snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile_release"
+# snakemake_args="-pk --rerun-incomplete"
+snakemake_args="-p --rerun-incomplete"
 
-while getopts ":d:s:g:r:q:t:k:p:c:o:@:f:mnvb" OPTION; do
+while getopts ":d:s:g:t:m:p:c:o:f:@:a:nb" OPTION; do
 	case $OPTION in
 		d) bam_dir=$(realpath $OPTARG) ;;
-		s) sample=$OPTARG ;;
+		s) samples=$OPTARG ;;
 		g) build=$OPTARG ;;
-		r) nrep=$OPTARG ;;
-		q) sequencing_type=$OPTARG ;;
 		t) transcripts=$OPTARG ;;
-		m) merge_reps=True ;;
-		k) peak_caller=$OPTARG ;;
-		p) pval=$OPTARG ;;
+		m) merge_reps=$OPTARG ;;
+		p) peak_caller=$OPTARG ;;
 		c) crup_cutoff=$OPTARG ;;
 		o) outdir=$OPTARG ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
 		n) nthreads="-nr" ;;
-		v) verbose="-p" ;;
 		b) snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile" ;;
+		a) snakemake_args="$snakemake_args $OPTARG" ;;
 		?) usage; exit 1 ;;
  	esac
 done
 
 # throw error if not all mandatory arguments are passed
-if [ -z ${bam_dir+x} ] || [ -z ${sample+x} ] || [ -z ${build} ] || [ -z ${nrep} ] || [ -z ${sequencing_type} ] ; then
-	usage
-	exit 1
-fi
+if [ -z ${bam_dir+x} ] || [ -z ${samples+x} ] || [ -z ${build} ] ; then usage && exit 1; fi
+if [[ $peak_caller != 'genrich' && $peak_caller != 'macs2' ]]; then echo "Usage: Optional argument -k PEAK_CALLER must be macs2 or genrich" && exit 1; fi
+if [[ $merge_reps != 'intersect_predictions' && $merge_reps != 'merge_bams' ]]; then echo "Usage: Optional argument -m MERGE_REPS must be intersect_predictions or merge_bams" && exit 1; fi
 
 # define which rules to force run
 if [[ $force == "all" ]]; then
@@ -83,19 +78,15 @@ snakemake \
 	--snakefile $snakefile \
 	--config \
 	bam_dir=$bam_dir \
-	sample=$sample \
+	samples=$samples \
 	build=$build \
-	nrep=$nrep \
-	sequencing_type=$sequencing_type \
 	transcripts=$transcripts \
 	merge_reps=$merge_reps \
 	peak_caller=$peak_caller \
-	pval=$pval \
 	crup_cutoff=$crup_cutoff \
 	outdir=$outdir \
 	$force_flag \
- 	$keep_going_flag \
-	$verbose \
+	$snakemake_args \
 	$nthreads
 """
 
