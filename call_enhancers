@@ -34,7 +34,7 @@ merge_reps="intersect_predictions"
 peak_caller=macs2
 crup_cutoff=0.5
 outdir=$(realpath .)
-atac_only=false
+atac_only=False
 force="none"
 nthreads="--cores 1"
 snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile_release"
@@ -50,7 +50,7 @@ while getopts ":d:s:g:t:m:p:c:o:f:@:!:anb" OPTION; do
 		p) peak_caller=$OPTARG ;;
 		c) crup_cutoff=$OPTARG ;;
 		o) outdir=$OPTARG ;;
-		a) atac_only=true ;;
+		a) atac_only=True ;;
 		f) force=$OPTARG ;;
 		@) nthreads="--cores $OPTARG" ;;
 		n) nthreads="-nr" ;;
@@ -64,6 +64,7 @@ done
 if [ -z ${bam_dir+x} ] || [ -z ${samples+x} ] || [ -z ${build} ] ; then usage && exit 1; fi
 if [[ $peak_caller != 'genrich' && $peak_caller != 'macs2' ]]; then echo "Usage: Optional argument -k PEAK_CALLER must be macs2 or genrich" && exit 1; fi
 if [[ $merge_reps != 'intersect_predictions' && $merge_reps != 'merge_bams' ]]; then echo "Usage: Optional argument -m MERGE_REPS must be intersect_predictions or merge_bams" && exit 1; fi
+if [[ ! -d $bam_dir ]]; then echo "Error: bam_dir not found"; exit 1; fi
 
 # define which rules to force run
 if [[ $force == "all" ]]; then

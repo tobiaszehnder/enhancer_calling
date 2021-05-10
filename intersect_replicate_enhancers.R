@@ -13,14 +13,15 @@ suppressMessages(library(rtracklayer))
 
 # load bed files
 e <- lapply(seq_len(nrep), function(i) {
-  import.bed(args[i+2])
+    import.bed(args[i+2])
 })
 
 # combine: take the union of the regions that at least partially overlap between replicates
 if (nrep == 1) {
-  e_combined <- e[[1]]
+    e_combined <- e[[1]]
 } else {
-  e_combined <- suppressMessages(GenomicRanges::union(e[[1]][overlapsAny(e[[1]],e[[2]])],e[[2]][overlapsAny(e[[2]],e[[1]])]))
+    e_combined <- suppressMessages(GenomicRanges::union(e[[1]][overlapsAny(e[[1]],e[[2]])],e[[2]][overlapsAny(e[[2]],e[[1]])]))
+    e_combined$name <- paste0('E_i_', seq_along(e_combined))
 }
 
 # write to file

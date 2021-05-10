@@ -22,13 +22,14 @@ def count_complete_replicates_per_sample(bam_dir, sample, nrep):
 def get_samples(samples, bam_dir):
     # function to return samples in the bam_dir and distinguish those that are available in 1 replicate from those that are available in multiple replicates
     # for every sample, check if all the bam files are there and skip the sample (or adjust the number of complete replicates) if files are missing.
+    print('_'*100)
     if samples == 'all':
         atac_only_message = '\nATAC_ONLY mode: Only calling ATAC-seq peaks.' if atac_only else ''
-        print('\n' + '_'*100 + atac_only_message + '\n\nFetching sample names from %s:\n' %bam_dir)
+        print(atac_only_message + '\nFetching sample names from %s:' %bam_dir)
         atac_files = glob.glob('%s/ATAC-seq*%s*Rep*.rmdup.bam' %(bam_dir,build)) # build: make sure only samples matching the passed build are taken in case there are data from multiple species in the bam_dir
     else:
         atac_files = sum([glob.glob('%s/ATAC-seq_%s_Rep*.rmdup.bam' %(bam_dir,sample)) for sample in samples.split(',')], [])
-    print('Bam files found: (ATAC-seq)\n%s' %'\n'.join(['%s' %sample for sample in atac_files]))
+    print('\nBam files found: (ATAC-seq)\n%s' %'\n'.join(['%s' %sample for sample in atac_files]))
     atac_samples = ['_'.join(os.path.basename(x).split('_')[:5]) for x in atac_files]
     print('\nUnique samples found: (ATAC-seq)\n%s\n' %'\n'.join(['%s' %sample.replace('ATAC-seq_','') for sample in set(atac_samples)]))
     atac_samples_nrep_counter = collections.Counter(atac_samples)
@@ -36,7 +37,7 @@ def get_samples(samples, bam_dir):
         print('Valid samples:\n' + '\n'.join(sum([['%s Rep%s' %(sample.replace('ATAC-seq_',''), rep) for rep in range(1,nreps+1)] for sample, nreps in atac_samples_nrep_counter.items() if not nreps == 0], [])) + '\n' + '_'*100 + '\n')
         return {sample.replace('ATAC-seq_',''): count for sample, count in atac_samples_nrep_counter.items() if count > 0}
     samples_nrep_dict = {sample: n_complete_reps for sample, n_complete_reps in [count_complete_replicates_per_sample(bam_dir, sample.replace('ATAC-seq_', ''), count) for sample, count in atac_samples_nrep_counter.items()] if n_complete_reps > 0}
-    print('Valid samples:\n' + '\n'.join(sum([['%s Rep%s' %(sample, rep) for rep in range(1,n_complete_reps+1)] for sample, n_complete_reps in samples_nrep_dict.items()], [])) + '\n' + '_'*100 + '\n')
+    print('Complete samples (ATAC-seq and Histone Modifications):\n' + '\n'.join(sum([['%s Rep%s' %(sample, rep) for rep in range(1,n_complete_reps+1)] for sample, n_complete_reps in samples_nrep_dict.items()], [])) + '\n' + '_'*100 + '\n')
     return samples_nrep_dict
 
 def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=False):
@@ -235,16 +236,16 @@ rule call_single_replicate_atac_peaks_genrich:
     output:
         '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,((?!merged).)*}.genrich_peaks.narrowPeak'
     shell:
-        'Genrich -j -y -p 0.05 -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end)
+        'prun mdl Genrich -j -y -p 0.05 -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
 
 rule call_multi_replicate_atac_peaks_genrich:
-    # genrich can handle multiple replicates, making IDR obsolete. Here, the q-value instead of p-value will be used.
+    # genrich can handle multiple replicates, making IDR obsolete.
     input:
         lambda wc: [get_replicate_bam('ATAC-seq', wc.sample, 'Rep%i' %i).replace('.rmdup.bam','.rmdup.nsort.bam') for i in range(1,(samples_nrep_dict[wc.sample]+1))]
     output:
         '{atac_peaks_dir}/ATAC-seq_{sample}.genrich_peaks.narrowPeak'
     shell:
-        'Genrich -j -y -q 0.05 -t "{input}" -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end)
+        'prun mdl Genrich -j -y -p 0.05 -t "{input}" -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
         
 rule call_atac_peaks_macs2:
     input:
