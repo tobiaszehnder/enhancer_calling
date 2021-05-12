@@ -17,14 +17,15 @@ optional:
 	   		   intersect_predictions: Predict enhancers separately on replicates and take the intersection of the final enhancer predictions.
 			   merge_bams: Predict enhancers on merged bam files.
 	-p PEAK_CALLER	   macs2 (default) or genrich
+	-P P-VALUE	   p-value for the peak-caller. Default: 0.05
 	-c CRUP_CUTOFF	   Default: 0.5
 	-o OUTDIR	   Path to the output directory
-	-a ATAC_ONLY   Only call ATAC-seq peaks
+	-a ATAC_ONLY   	   Only call ATAC-seq peaks
 	-f FORCE	   Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
 	-@ NTHREADS   	   Number of parallel threads
         -n DRY_RUN	   Flag for a dry run, i.e. only print the commands instead of executing.
 	-b BETA		   Use currently developed Snakefile (for testing purposes only)
-	-! SNAKEMAKE_ARGS    Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
+	-! SNAKEMAKE_ARGS  Optional arguments for Snakemake in quotes, i.e. -s "--debug-dag --unlock -p"
 EOF
 }
 
@@ -32,6 +33,7 @@ EOF
 transcripts="UCSC"
 merge_reps="intersect_predictions"
 peak_caller=macs2
+pval=0.05
 crup_cutoff=0.5
 outdir=$(realpath .)
 atac_only=False
@@ -40,14 +42,15 @@ nthreads="--cores 1"
 snakefile="/project/process_seq_data/bin/enhancer_calling/Snakefile_release"
 snakemake_args="-pk --rerun-incomplete"
 
-while getopts ":d:s:g:t:m:p:c:o:f:@:!:anb" OPTION; do
-	case $OPTION in
+while getopts ":d:s:g:t:m:p:P:c:o:f:@:!:anb" OPTION; do
+ 	case $OPTION in
 		d) bam_dir=$(realpath $OPTARG) ;;
 		s) samples=$OPTARG ;;
 		g) build=$OPTARG ;;
 		t) transcripts=$OPTARG ;;
 		m) merge_reps=$OPTARG ;;
 		p) peak_caller=$OPTARG ;;
+		P) pval=$OPTARG ;;
 		c) crup_cutoff=$OPTARG ;;
 		o) outdir=$OPTARG ;;
 		a) atac_only=True ;;
@@ -86,6 +89,7 @@ snakemake \
 	transcripts=$transcripts \
 	merge_reps=$merge_reps \
 	peak_caller=$peak_caller \
+	pval=$pval \
 	crup_cutoff=$crup_cutoff \
 	outdir=$outdir \
 	atac_only=$atac_only \

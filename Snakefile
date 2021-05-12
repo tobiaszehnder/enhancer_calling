@@ -80,12 +80,12 @@ def get_replicate_bam(feature, sample, rep, index=False):
 
 def get_input_for_enhancer_filtering(wc):
     if (merge_reps == 'intersect_predictions') or (samples_nrep_dict[wc.sample] == 1):
-        atac_peaks = '%s/ATAC-seq_%s_%s.%s_peaks.bed' %(atac_peaks_dir, wc.sample, wc.rep, peak_caller)
+        atac_peaks = '%s/ATAC-seq_%s_%s.%s_peaks_%s.bed' %(atac_peaks_dir, wc.sample, wc.rep, peak_caller, pval)
     elif (merge_reps == 'merge_bams') and (samples_nrep_dict[wc.sample] > 1):
         if peak_caller == 'macs2':
-            atac_peaks = '%s/ATAC-seq_%s.macs2_peaks.idr.bed' %(atac_peaks_dir, wc.sample)
+            atac_peaks = '%s/ATAC-seq_%s.macs2_peaks_%s.idr.bed' %(atac_peaks_dir, wc.sample, pval)
         elif peak_caller == 'genrich': # genrich can handle multiple replicates, making IDR obsolete
-            atac_peaks = '%s/ATAC-seq_%s.genrich_peaks.bed' %(atac_peaks_dir, wc.sample)
+            atac_peaks = '%s/ATAC-seq_%s.genrich_peaks_%s.bed' %(atac_peaks_dir, wc.sample, pval)
     crup_predictions = '%s/%s_%s.enhancers.crup.bed' %(crup_dir, wc.sample, wc.rep)
     promoters = '%s/%s_%s.promoters.bed' %(promoter_dir, wc.sample, wc.rep)
     transcripts = transcripts_file
@@ -234,36 +234,41 @@ rule call_single_replicate_atac_peaks_genrich:
     input:
         lambda wc: get_replicate_bam('ATAC-seq', wc.sample, wc.rep).replace('.rmdup.bam','.rmdup.nsort.bam')
     output:
-        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,((?!merged).)*}.genrich_peaks.narrowPeak'
+        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,((?!merged).)*}.genrich_peaks_%s.narrowPeak' %pval
+    params:
+        pval = pval
     shell:
-        'prun mdl Genrich -j -y -p 0.05 -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
+        'prun mdl Genrich -j -y -p {params.pval} -t {input} -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
 
 rule call_multi_replicate_atac_peaks_genrich:
     # genrich can handle multiple replicates, making IDR obsolete.
     input:
         lambda wc: [get_replicate_bam('ATAC-seq', wc.sample, 'Rep%i' %i).replace('.rmdup.bam','.rmdup.nsort.bam') for i in range(1,(samples_nrep_dict[wc.sample]+1))]
     output:
-        '{atac_peaks_dir}/ATAC-seq_{sample}.genrich_peaks.narrowPeak'
+        '{atac_peaks_dir}/ATAC-seq_{sample}.genrich_peaks_%s.narrowPeak' %pval
+    params:
+        pval = pval
     shell:
-        'prun mdl Genrich -j -y -p 0.05 -t "{input}" -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
+        'prun mdl Genrich -j -y -p {params.pval} -t "{input}" -o {output}' # -j: ATAC-seq mode, -y: keep unpaired reads (some old ATAC are single-end), permissive p-value (default 0.01)
         
 rule call_atac_peaks_macs2:
     input:
         sizes = ancient(sizes),
         bam = lambda wc: get_replicate_bam('ATAC-seq', wc.sample, wc.rep)
     output:
-        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep}.macs2_peaks.narrowPeak',
+        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep}.macs2_peaks_%s.narrowPeak' %pval,
     params:
         genome_size = genome_size,
         name = 'ATAC-seq_{sample}_{rep}.macs2',
+        pval = pval
     shell:
-        'macs2 callpeak -t {input.bam} --outdir {wildcards.atac_peaks_dir} -n {params.name} -g {params.genome_size} -q 0.05'
+        'macs2 callpeak -t {input.bam} --outdir {wildcards.atac_peaks_dir} -n {params.name} -g {params.genome_size} -q {params.pval}'
 
 rule narrowPeak_to_bed:
     input:
-        '{sample}.{peak_caller}_peaks.narrowPeak'
+        '{sample}.{peak_caller}_peaks_%s.narrowPeak' %pval
     output:
-        '{sample}.{peak_caller}_peaks.bed'
+        '{sample}.{peak_caller}_peaks_%s.bed' %pval
     shell:
         'awk -F "\\t" -v OFS="\\t" "{{print \$1,\$2,\$3,\$4,\$5,\$6}}" {input} > {output}'
         
