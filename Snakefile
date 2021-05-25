@@ -42,13 +42,13 @@ def get_samples(samples, bam_dir):
 
 def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=False):
     if atac_only:
-        rep_peaks = ['%s/ATAC-seq_%s_Rep%s.%s_peaks.bed' %(atac_peaks_dir, sample, i, peak_caller) for i in range(1,nrep+1)]
+        rep_peaks = ['%s/ATAC-seq_%s_Rep%s.%s_peaks_%s.bed' %(atac_peaks_dir, sample, i, peak_caller, pval) for i in range(1,nrep+1)]
         combined_peaks = []
         if nrep > 1:
             if peak_caller == 'macs2':
-                combined_peaks = ['%s/ATAC-seq_%s.macs2_peaks.idr.bed' %(atac_peaks_dir, sample)]
+                combined_peaks = ['%s/ATAC-seq_%s.macs2_peaks_%s.idr.bed' %(atac_peaks_dir, sample, pval)]
             elif peak_caller == 'genrich':
-                combined_peaks = ['%s/ATAC-seq_%s.genrich_peaks.bed' %(atac_peaks_dir, sample)]
+                combined_peaks = ['%s/ATAC-seq_%s.genrich_peaks_%s.bed' %(atac_peaks_dir, sample, pval)]
         return rep_peaks + combined_peaks
     else:
         if nrep == 1:
@@ -266,11 +266,20 @@ rule call_atac_peaks_macs2:
 
 rule narrowPeak_to_bed:
     input:
-        '{sample}.{peak_caller}_peaks_%s.narrowPeak' %pval
+        summits = '{sample}.{peak_caller}_peaks_%s.summits.bed' %pval,
+        narrowPeak = '{sample}.{peak_caller}_peaks_%s.narrowPeak' %pval
     output:
         '{sample}.{peak_caller}_peaks_%s.bed' %pval
     shell:
-        'awk -F "\\t" -v OFS="\\t" "{{print \$1,\$2,\$3,\$4,\$5,\$6}}" {input} > {output}'
+        'awk -F "\\t" -v OFS="\\t" "{{print \$1,\$2,\$3,\$4,\$5,\$6}}" {input.narrowPeak} > {output}'
+
+rule summit_to_bed:
+    input:
+        '{sample}.{peak_caller}_peaks_%s.narrowPeak' %pval
+    output:
+        '{sample}.{peak_caller}_peaks_%s.summits.bed' %pval
+    shell:
+        'awk -F "\\t" -v OFS="\\t" "{{print \$1,\$2+\$10,\$2+\$10+1,\$4,\$5,\$6}}" {input} > {output}'
         
 rule bedgraph_to_bed:
     # crup's predictions may contain negative coordinates (removed with awk) and such that extend chromosome sizes (removed with bedtools slop)
