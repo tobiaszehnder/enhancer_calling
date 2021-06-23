@@ -13,12 +13,12 @@ required:
 
 optional:
 	-t TRANSCRIPTS	   Bed file with annotated transcripts for the given genome for filtering TSS
-	-m MERGE_REPS	   intersect_predictions (default) or merge_bams
-	   		   intersect_predictions: Predict enhancers separately on replicates and take the intersection of the final enhancer predictions.
+	-m MERGE_REPS	   merge_bams (default) or intersect_predictions
 			   merge_bams: Predict enhancers on merged bam files.
-	-p PEAK_CALLER	   macs2 (default) or genrich
+	   		   intersect_predictions: Predict enhancers separately on replicates and take the intersection of the final enhancer predictions.
+	-p PEAK_CALLER	   genrich (default) or macs2
 	-P P-VALUE	   p-value for the peak-caller. Default: 0.05
-	-c CRUP_CUTOFF	   Default: 0.5
+	-c CRUP_CUTOFF	   Default: 0.3
 	-o OUTDIR	   Path to the output directory
 	-a ATAC_ONLY   	   Only call ATAC-seq peaks
 	-f FORCE	   Force execution and overwriting existing files. Possible values: none (default) | space-separated rule names | all
@@ -31,10 +31,10 @@ EOF
 
 # parse arguments (more info at https://ndench.github.io/bash/parsing-bash-flags)
 transcripts="UCSC"
-merge_reps="intersect_predictions"
-peak_caller=macs2
+merge_reps="merge_bams"
+peak_caller=genrich
 pval=0.05
-crup_cutoff=0.5
+crup_cutoff=0.3 # lowered to be more permissive, justified by the additional requirement of an ATAC-seq peak
 outdir=$(realpath .)
 atac_only=False
 force="none"

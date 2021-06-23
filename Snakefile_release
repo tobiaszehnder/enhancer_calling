@@ -81,15 +81,18 @@ def get_replicate_bam(feature, sample, rep, index=False):
 def get_input_for_enhancer_filtering(wc):
     if (merge_reps == 'intersect_predictions') or (samples_nrep_dict[wc.sample] == 1):
         atac_peaks = '%s/ATAC-seq_%s_%s.%s_peaks_%s.bed' %(atac_peaks_dir, wc.sample, wc.rep, peak_caller, pval)
+        atac_summits = '%s/ATAC-seq_%s_%s.%s_peaks_%s.summits.bed' %(atac_peaks_dir, wc.sample, wc.rep, peak_caller, pval)
     elif (merge_reps == 'merge_bams') and (samples_nrep_dict[wc.sample] > 1):
         if peak_caller == 'macs2':
             atac_peaks = '%s/ATAC-seq_%s.macs2_peaks_%s.idr.bed' %(atac_peaks_dir, wc.sample, pval)
+            atac_summits = '%s/ATAC-seq_%s.macs2_peaks_%s.idr.summits.bed' %(atac_peaks_dir, wc.sample, pval)
         elif peak_caller == 'genrich': # genrich can handle multiple replicates, making IDR obsolete
             atac_peaks = '%s/ATAC-seq_%s.genrich_peaks_%s.bed' %(atac_peaks_dir, wc.sample, pval)
+            atac_summits = '%s/ATAC-seq_%s.genrich_peaks_%s.summits.bed' %(atac_peaks_dir, wc.sample, pval)
     crup_predictions = '%s/%s_%s.enhancers.crup.bed' %(crup_dir, wc.sample, wc.rep)
     promoters = '%s/%s_%s.promoters.bed' %(promoter_dir, wc.sample, wc.rep)
     transcripts = transcripts_file
-    return [atac_peaks, crup_predictions, promoters, transcripts]
+    return [atac_peaks, atac_summits, crup_predictions, promoters, transcripts]
 
 # convert config dict entries to variables, e.g. a = d['a']. (bam_dir, samples, build, transcripts, merge_reps, peak_caller, crup_cutoff, outdir, atac_only)
 for k,v in config.items():
@@ -289,7 +292,7 @@ rule bedgraph_to_bed:
     output:
         '{crup_dir}/{sample}_{rep}.enhancers.crup.bed'
     shell:
-        'cat {input.bedgraph} | awk -F"\t" -v OFS="\t" "{{if (\$2<0) \$2=0}} {{print \$0}}" | bedtools slop -i /dev/stdin -b 0 -g {input.sizes} > {output}'
+        'cat {input.bedgraph} | awk -F"\t" -v OFS="\t" "{{if (\$2<0) \$2=0}} {{print \$1,\$2,\$3,\"crup_\"NR,\$4,\".\"}}" | bedtools slop -i /dev/stdin -b 0 -g {input.sizes} > {output}'
     
 rule call_crup_enhancers:
     input:
