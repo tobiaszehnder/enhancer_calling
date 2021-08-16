@@ -180,7 +180,7 @@ rule genome_size_to_bed:
     output:
         '{dir}/{build}.sizes.bed'
     shell:
-        'cat {input} | awk -F"\t" -v OFS="\t" "{{\$2=int(\$2/100)*100}} \$1 !~ /Un|random|chrM/ {{print \$1,100,\$2}}" > {output}'
+        'cat {input} | awk -F"\\t" -v OFS="\\t" "{{\$2=int(\$2/100)*100}} \$1 !~ /Un|random|chrM/ {{print \$1,100,\$2}}" > {output}'
         
 rule call_promoters:
     input:
@@ -292,7 +292,7 @@ rule bedgraph_to_bed:
     output:
         '{crup_dir}/{sample}_{rep}.enhancers.crup.bed'
     shell:
-        'cat {input.bedgraph} | awk -F"\t" -v OFS="\t" "{{if (\$2<0) \$2=0}} {{print \$1,\$2,\$3,\"crup_\"NR,\$4,\".\"}}" | bedtools slop -i /dev/stdin -b 0 -g {input.sizes} > {output}'
+        'cat {input.bedgraph} | awk -F"\\t" -v OFS="\\t" "{{if (\$2<0) \$2=0}} {{print \$1,\$2,\$3,crup_NR,\$4,\\".\\"}}" | bedtools slop -i /dev/stdin -b 0 -g {input.sizes} > {output}'
     
 rule call_crup_enhancers:
     input:
