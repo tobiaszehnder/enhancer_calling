@@ -40,16 +40,19 @@ def get_samples(samples, bam_dir):
     print('Complete samples (ATAC-seq and Histone Modifications):\n' + '\n'.join(sum([['%s Rep%s' %(sample, rep) for rep in range(1,n_complete_reps+1)] for sample, n_complete_reps in samples_nrep_dict.items()], [])) + '\n' + '_'*100 + '\n')
     return samples_nrep_dict
 
-def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=False):
+def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=False, merged_bigwig=False):
     if atac_only:
         rep_peaks = ['%s/ATAC-seq_%s_Rep%s.%s_peaks_%s.bed' %(atac_peaks_dir, sample, i, peak_caller, pval) for i in range(1,nrep+1)]
-        combined_peaks = []
         if nrep > 1:
             if peak_caller == 'macs2':
-                combined_peaks = ['%s/ATAC-seq_%s.macs2_peaks_%s.idr.bed' %(atac_peaks_dir, sample, pval)]
+                combined_peaks = '%s/ATAC-seq_%s.macs2_peaks_%s.idr.bed' %(atac_peaks_dir, sample, pval)
             elif peak_caller == 'genrich':
-                combined_peaks = ['%s/ATAC-seq_%s.genrich_peaks_%s.bed' %(atac_peaks_dir, sample, pval)]
-        return rep_peaks + combined_peaks
+                combined_peaks = '%s/ATAC-seq_%s.genrich_peaks_%s.bed' %(atac_peaks_dir, sample, pval)
+            if merged_bigwig:
+                bigwig = '%s/ATAC-seq_%s_merged.cpm.bw' %(bw_dir, sample)
+                return [combined_peaks, bigwig]
+            return [combined_peaks]
+        return rep_peaks
     else:
         if nrep == 1:
             enhancers_rep = ['%s/%s_Rep1.enhancers.filtered.bed' %(outdir, sample)]
@@ -62,8 +65,8 @@ def get_targets(sample, nrep, merge_reps=None, transcripts_file=None, atac_only=
                 # targets += [re.sub('.bed', '.stats.pdf', enhancers_intersect)]
             elif merge_reps == 'merge_bams':
                 enhancers = ['%s/%s_merged.enhancers.filtered.bed' %(outdir, sample)]
-                merged_bam_files = ['%s/%s_%s_merged.cpm.bw' %(bw_dir, feature, sample) for feature in ('H3K27ac','H3K4me1','H3K4me3')]
-                targets = sum([enhancers, merged_bam_files], [])
+                merged_bw_files = ['%s/%s_%s_merged.cpm.bw' %(bw_dir, feature, sample) for feature in ('H3K27ac','H3K4me1','H3K4me3')]
+                targets = sum([enhancers, merged_bw_files], [])
                 # targets += [re.sub('.bed', '.stats.pdf', enhancers)]
     return targets
 
@@ -96,6 +99,7 @@ def get_input_for_enhancer_filtering(wc):
 
 # convert config dict entries to variables, e.g. a = d['a']. (bam_dir, samples, build, transcripts, merge_reps, peak_caller, crup_cutoff, outdir, atac_only)
 for k,v in config.items():
+    print(k,v)
     exec(k + '=v')
 
 # convert passed directory / file paths to absolute paths
@@ -116,7 +120,7 @@ genome_size = sum([int(x.strip().split('\t')[1]) for x in open(sizes).readlines(
 samples_nrep_dict = get_samples(samples, bam_dir)
 
 # define targets
-targets = sum([get_targets(sample, nrep, merge_reps, transcripts_file, atac_only) for sample, nrep in samples_nrep_dict.items()], [])
+targets = sum([get_targets(sample, nrep, merge_reps, transcripts_file, atac_only, merged_bigwig) for sample, nrep in samples_nrep_dict.items()], [])
 
 # -----
 # rules
@@ -237,7 +241,7 @@ rule call_single_replicate_atac_peaks_genrich:
     input:
         lambda wc: get_replicate_bam('ATAC-seq', wc.sample, wc.rep).replace('.rmdup.bam','.rmdup.nsort.bam')
     output:
-        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,((?!merged).)*}.genrich_peaks_%s.narrowPeak' %pval
+        '{atac_peaks_dir}/ATAC-seq_{sample}_{rep,(Rep|rep).*}.genrich_peaks_%s.narrowPeak' %pval # old constraint: {rep,((?!merged).)*} 
     params:
         pval = pval
     shell:
@@ -309,7 +313,7 @@ rule call_crup_enhancers:
     shell:
         '''
         mkdir -p {wildcards.crup_dir}/{wildcards.sample}_{wildcards.rep}
-        prun mdl CRUP.R -P -x {threads} -m {input.data} -u {params.crup_cutoff} -o {wildcards.crup_dir}.{wildcards.sample}_{wildcards.rep} > {log}
+        prun mdl CRUP.R -P -x {threads} -m {input.data} -u {params.crup_cutoff} -o {wildcards.crup_dir}/{wildcards.sample}_{wildcards.rep} > {log}
         '''
 
 rule normalize_crup_data:
